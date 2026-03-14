@@ -392,6 +392,8 @@ def build_live_pool_outputs(
         output_dir=output_dir,
         as_of_date=latest_date,
         pool_size=int(config["export"]["live_pool_size"]),
+        mode=str(resolved_mode),
+        source_project=str(config.get("publish", {}).get("source_project", config.get("project", {}).get("name", "crypto-leader-rotation"))),
         save_legacy=bool(config["export"]["save_legacy_live_pool"]),
     )
     logger.info("Live pool exports saved into %s for %s.", output_dir, latest_date.date())

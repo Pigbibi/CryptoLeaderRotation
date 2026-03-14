@@ -257,6 +257,30 @@ Methodology hardening note:
 - older reports also averaged duplicate predictions from overlapping test windows, which is smoother than the real live path
 - those older optimistic metrics should be treated as historical / legacy and are not directly comparable to the hardened baseline
 
+## Downstream Live-Pool Contract
+
+The stable downstream contract is the exported monthly live pool, not the research reports.
+
+Downstream consumers should rely on these core fields in `data/output/live_pool.json`, `data/output/live_pool_legacy.json`, or the Firestore summary document:
+
+- `as_of_date`
+- `version`
+- `mode`
+- `pool_size`
+- `symbols`
+- `symbol_map`
+- `source_project`
+
+Publish-time pointer fields such as `storage_prefix`, `current_prefix`, `live_pool_uri`, `live_pool_legacy_uri`, `latest_universe_uri`, and `latest_ranking_uri` are stable when present in the published Firestore payload, but they are release/distribution metadata rather than research features.
+
+Freshness guidance:
+
+- production v1 publishes a monthly `core_major` pool
+- downstream should treat `as_of_date` as the snapshot date to validate freshness against its own staleness threshold
+- stale or invalid upstream data should be handled as a degraded state, not treated as equivalent to a healthy fresh publish
+
+See `docs/integration_contract.md` for the full contract and fallback semantics.
+
 ## Dynamic Universe Logic
 
 The universe is a hard filter layer, not the final holdings set.

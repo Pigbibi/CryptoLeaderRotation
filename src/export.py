@@ -45,31 +45,41 @@ def export_live_pool(
     output_dir: str | Any,
     as_of_date: pd.Timestamp,
     pool_size: int,
+    mode: str = "core_major",
+    source_project: str = "crypto-leader-rotation",
     save_legacy: bool = True,
 ) -> dict[str, Any]:
     """Export the latest live pool in both simple and legacy-compatible forms."""
     selected = ranking_snapshot.sort_values("final_score", ascending=False).head(pool_size).copy()
     symbols = selected.index.tolist()
     metadata_indexed = metadata.set_index("symbol")
+    as_of_date_str = date_to_str(as_of_date)
+    version = f"{as_of_date_str}-{mode}"
     symbol_map = {
         symbol: {"base_asset": str(metadata_indexed.loc[symbol, "base_asset"])}
         for symbol in symbols
         if symbol in metadata_indexed.index
     }
     payload = {
-        "as_of_date": date_to_str(as_of_date),
+        "as_of_date": as_of_date_str,
+        "version": version,
+        "mode": str(mode),
         "pool_size": len(symbols),
         "symbols": symbols,
         "symbol_map": symbol_map,
+        "source_project": str(source_project),
     }
     write_json(output_dir / "live_pool.json", payload)
 
     if save_legacy:
         legacy_payload = {
-            "as_of_date": date_to_str(as_of_date),
+            "as_of_date": as_of_date_str,
+            "version": version,
+            "mode": str(mode),
             "pool_size": len(symbols),
             "symbols": symbol_map,
+            "symbol_map": symbol_map,
+            "source_project": str(source_project),
         }
         write_json(output_dir / "live_pool_legacy.json", legacy_payload)
     return payload
-
