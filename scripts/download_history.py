@@ -195,6 +195,14 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def ensure_benchmark_in_downloads(symbols: list[str], benchmark_symbol: str) -> list[str]:
+    """Ensure auto-selected downloads always include the benchmark symbol first."""
+    benchmark_symbol = str(benchmark_symbol).upper()
+    normalized = [str(symbol).upper() for symbol in symbols]
+    deduped = [symbol for symbol in normalized if symbol != benchmark_symbol]
+    return [benchmark_symbol, *deduped]
+
+
 def main() -> None:
     args = parse_args()
     config = load_config(args.config)
@@ -227,6 +235,11 @@ def main() -> None:
             .to_string(index=False),
         )
         symbols = ranked["symbol"].tolist()
+        symbols = ensure_benchmark_in_downloads(symbols, config["data"]["benchmark_symbol"])
+        logger.info(
+            "Auto-download selection explicitly includes benchmark symbol %s.",
+            config["data"]["benchmark_symbol"],
+        )
 
     if args.top_liquid is not None:
         symbols = symbols[: args.top_liquid]
