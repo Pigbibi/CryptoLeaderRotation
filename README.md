@@ -358,6 +358,12 @@ Canonical command:
 .venv/bin/python scripts/run_monthly_shadow_build.py
 ```
 
+Local helper target:
+
+```bash
+make monthly-shadow-build
+```
+
 Canonical outputs:
 
 - official baseline
@@ -381,6 +387,32 @@ Track identity fields to rely on:
 - `expected_pool_size`
 
 Baseline remains the official production reference. `challenger_topk_60` remains shadow-only.
+
+## Monthly Build Telegram Notify
+
+Optional short build/publish health notification:
+
+```bash
+.venv/bin/python scripts/run_monthly_build_telegram.py
+```
+
+Or:
+
+```bash
+make monthly-build-telegram
+```
+
+Environment:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+
+Behavior:
+
+- sends only a short operational summary for monthly build/publish health
+- uses existing monthly build outputs such as `monthly_shadow_build_summary.json`, `live_pool.json`, `release_manifest.json`, and `shadow_candidate_tracks/track_summary.csv`
+- skips cleanly if Telegram credentials are missing
+- never changes the monthly build behavior and is not an AI briefing channel
 
 ## Dynamic Universe Logic
 
