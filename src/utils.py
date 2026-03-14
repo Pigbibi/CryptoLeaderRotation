@@ -63,7 +63,22 @@ def write_json(path: Path | str, payload: Any) -> None:
 
 def clean_numeric_frame(frame: pd.DataFrame) -> pd.DataFrame:
     """Replace inf with NaN and keep the original frame shape."""
-    return frame.replace([np.inf, -np.inf], np.nan)
+    cleaned = frame.replace([np.inf, -np.inf], np.nan)
+    return downcast_numeric_frame(cleaned)
+
+
+def downcast_numeric_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """Reduce pandas numeric dtypes to lower-memory equivalents when safe."""
+    downcasted = frame.copy()
+    float_columns = list(downcasted.select_dtypes(include=["floating"]).columns)
+    integer_columns = list(downcasted.select_dtypes(include=["integer"]).columns)
+
+    for column in float_columns:
+        downcasted[column] = pd.to_numeric(downcasted[column], errors="coerce", downcast="float")
+    for column in integer_columns:
+        downcasted[column] = pd.to_numeric(downcasted[column], errors="coerce", downcast="integer")
+
+    return downcasted
 
 
 def safe_divide(
@@ -186,7 +201,7 @@ def load_local_histories(
             frame[column] = pd.to_numeric(frame[column], errors="coerce")
         frame = frame.sort_values("date").drop_duplicates("date", keep="last")
         frame["symbol"] = symbol
-        histories[symbol] = frame.reset_index(drop=True)
+        histories[symbol] = downcast_numeric_frame(frame.reset_index(drop=True))
     return histories
 
 
