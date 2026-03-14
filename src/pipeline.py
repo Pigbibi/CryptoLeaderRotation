@@ -16,8 +16,204 @@ from .plots import save_equity_curve_plot, save_leader_metrics_plot
 from .ranking import build_final_scores, latest_ranking_snapshot
 from .regime import classify_regime
 from .rules import compute_rule_scores
-from .universe import build_dynamic_universe, resolve_universe_mode
-from .utils import get_logger, load_local_histories
+from .universe import build_dynamic_universe, filter_metadata_candidates, resolve_universe_mode
+from .utils import get_logger, load_local_histories, read_json
+
+
+def _build_live_prefilter_stats(
+    raw_dir: Path,
+    candidate_symbols: list[str],
+    start_date: Any,
+    end_date: Any,
+    min_daily_quote_vol: float,
+) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    end_timestamp = pd.Timestamp(end_date).normalize() if end_date is not None else None
+    start_timestamp = pd.Timestamp(start_date).normalize() if start_date is not None else None
+
+    for symbol in candidate_symbols:
+        file_path = raw_dir / f"{symbol}.csv"
+        if not file_path.exists():
+            continue
+        try:
+            history = pd.read_csv(file_path, usecols=["date", "close", "quote_volume"])
+        except Exception:
+            continue
+        if history.empty:
+            continue
+
+        history["date"] = pd.to_datetime(history["date"]).dt.normalize()
+        if start_timestamp is not None:
+            history = history.loc[history["date"] >= start_timestamp]
+        if end_timestamp is not None:
+            history = history.loc[history["date"] <= end_timestamp]
+        if history.empty:
+            continue
+
+        quote_volume = pd.to_numeric(history["quote_volume"], errors="coerce")
+        close = pd.to_numeric(history["close"], errors="coerce")
+        history_days = int(len(history))
+
+        tail_30 = quote_volume.tail(min(30, history_days))
+        tail_90 = quote_volume.tail(min(90, history_days))
+        tail_180 = quote_volume.tail(min(180, history_days))
+        max_liquidity = max(tail_30.mean(), tail_90.mean(), tail_180.mean())
+        min_liquidity = min(tail_30.mean(), tail_90.mean(), tail_180.mean())
+        tradable_flag = ((quote_volume > 0.0) & close.notna()).astype(float)
+        tradable_ratio_180 = float(tradable_flag.tail(min(180, history_days)).mean())
+
+        if min_daily_quote_vol > 0.0:
+            liquidity_days_90 = int((tail_90 >= min_daily_quote_vol).sum())
+            liquidity_days_180 = int((tail_180 >= min_daily_quote_vol).sum())
+        else:
+            liquidity_days_90 = int(len(tail_90))
+            liquidity_days_180 = int(len(tail_180))
+
+        rows.append(
+            {
+                "symbol": symbol,
+                "history_days": history_days,
+                "latest_date": pd.to_datetime(history["date"]).max(),
+                "avg_quote_vol_30": float(tail_30.mean()),
+                "avg_quote_vol_90": float(tail_90.mean()),
+                "avg_quote_vol_180": float(tail_180.mean()),
+                "liquidity_stability": float(min_liquidity / max_liquidity) if max_liquidity > 0 else 0.0,
+                "tradable_ratio_180": tradable_ratio_180,
+                "liquidity_days_90": liquidity_days_90,
+                "liquidity_days_180": liquidity_days_180,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def _load_previous_live_symbols(output_dir: Path) -> list[str]:
+    legacy_payload = read_json(output_dir / "live_pool_legacy.json", default={}) or {}
+    symbols = legacy_payload.get("symbols", {})
+    if isinstance(symbols, dict):
+        return [symbol.upper() for symbol in symbols if isinstance(symbol, str) and symbol.endswith("USDT")]
+    return []
+
+
+def select_live_candidate_symbols(
+    config: dict[str, Any],
+    metadata: pd.DataFrame,
+    as_of_date: Optional[pd.Timestamp] = None,
+    universe_mode: Optional[str] = None,
+) -> list[str]:
+    """Select a compact live-build candidate set before loading full local histories."""
+    logger = get_logger("live_prefilter")
+    live_cfg = config.get("live_build", {})
+    if not live_cfg.get("prefilter_enabled", True):
+        return []
+
+    resolved_mode, mode_cfg = resolve_universe_mode(config, universe_mode=universe_mode, purpose="live")
+    filtered_metadata = filter_metadata_candidates(
+        metadata,
+        config,
+        universe_mode=resolved_mode,
+        purpose="live",
+    )
+    benchmark_symbol = str(config["data"]["benchmark_symbol"]).upper()
+    metadata_candidates = sorted(
+        set(filtered_metadata.loc[filtered_metadata["metadata_eligible"], "symbol"].astype(str).str.upper())
+    )
+    if not metadata_candidates:
+        return [benchmark_symbol]
+
+    stats = _build_live_prefilter_stats(
+        raw_dir=config["paths"].raw_dir,
+        candidate_symbols=metadata_candidates,
+        start_date=config["data"]["start_date"],
+        end_date=as_of_date or config["data"]["end_date"],
+        min_daily_quote_vol=float(mode_cfg.get("min_daily_quote_vol", 0.0) or 0.0),
+    )
+    available_local_count = int(len(stats))
+    if stats.empty:
+        return [benchmark_symbol]
+
+    history_ratio = float(live_cfg.get("history_ratio", 0.9))
+    volume_ratio = float(live_cfg.get("volume_ratio", 0.8))
+    stability_ratio = float(live_cfg.get("liquidity_stability_ratio", 0.9))
+    tradable_ratio = float(live_cfg.get("tradable_ratio", 0.98))
+    liquidity_days_ratio = float(live_cfg.get("liquidity_days_ratio", 0.9))
+
+    stats["relaxed_pass"] = (
+        (stats["history_days"] >= int(mode_cfg["min_history_days"] * history_ratio))
+        & (stats["avg_quote_vol_30"] >= float(mode_cfg["min_avg_quote_vol_30"]) * volume_ratio)
+        & (stats["avg_quote_vol_90"] >= float(mode_cfg["min_avg_quote_vol_90"]) * volume_ratio)
+        & (stats["avg_quote_vol_180"] >= float(mode_cfg["min_avg_quote_vol_180"]) * volume_ratio)
+        & (stats["liquidity_stability"] >= float(mode_cfg["min_liquidity_stability"]) * stability_ratio)
+        & (stats["tradable_ratio_180"] >= float(mode_cfg["min_tradable_ratio_180"]) * tradable_ratio)
+        & (
+            stats["liquidity_days_90"]
+            >= int(float(mode_cfg.get("min_liquidity_days_90", 0) or 0) * liquidity_days_ratio)
+        )
+        & (
+            stats["liquidity_days_180"]
+            >= int(float(mode_cfg.get("min_liquidity_days_180", 0) or 0) * liquidity_days_ratio)
+        )
+    )
+
+    ranked = stats.sort_values(
+        by=[
+            "relaxed_pass",
+            "avg_quote_vol_180",
+            "avg_quote_vol_90",
+            "avg_quote_vol_30",
+            "liquidity_stability",
+            "tradable_ratio_180",
+            "history_days",
+            "symbol",
+        ],
+        ascending=[False, False, False, False, False, False, False, True],
+    ).reset_index(drop=True)
+    ranked_symbols = ranked["symbol"].tolist()
+
+    selected = set(ranked.loc[ranked["relaxed_pass"], "symbol"].tolist())
+    min_candidate_count = int(live_cfg.get("min_candidate_count", 20))
+    max_candidate_count = int(live_cfg.get("max_candidate_count", 30))
+    target_count = max(min_candidate_count, len(selected))
+    target_count = min(max(target_count, 1), max_candidate_count, len(ranked_symbols))
+    selected.update(ranked_symbols[:target_count])
+
+    if live_cfg.get("include_previous_live_pool", True):
+        selected.update(_load_previous_live_symbols(config["paths"].output_dir))
+
+    selected.add(benchmark_symbol)
+    compact_candidates = [symbol for symbol in ranked_symbols if symbol in selected]
+    compact_candidates.extend(
+        sorted(symbol for symbol in selected if symbol not in set(compact_candidates) and symbol != benchmark_symbol)
+    )
+    if benchmark_symbol not in compact_candidates:
+        compact_candidates.insert(0, benchmark_symbol)
+    else:
+        compact_candidates = [benchmark_symbol, *[symbol for symbol in compact_candidates if symbol != benchmark_symbol]]
+
+    logger.info(
+        "Live prefilter reduced %s metadata-eligible symbols (%s locally cached) to %s load symbols for mode '%s'.",
+        len(metadata_candidates),
+        available_local_count,
+        len(compact_candidates),
+        resolved_mode,
+    )
+    logger.info(
+        "Live prefilter head:\n%s",
+        ranked[
+            [
+                "symbol",
+                "relaxed_pass",
+                "history_days",
+                "avg_quote_vol_180",
+                "avg_quote_vol_90",
+                "avg_quote_vol_30",
+                "liquidity_stability",
+            ]
+        ]
+        .head(max(target_count, 15))
+        .to_string(index=False),
+    )
+    return compact_candidates
 
 
 def prepare_research_panel(
@@ -39,7 +235,23 @@ def prepare_research_panel(
     metadata = pd.read_csv(metadata_path)
     start_date = config["data"]["start_date"]
     end_date = as_of_date or config["data"]["end_date"]
-    histories = load_local_histories(paths.raw_dir, symbols=symbols, start_date=start_date, end_date=end_date)
+    load_symbols = list(symbols) if symbols is not None else None
+    if purpose == "live":
+        live_candidates = select_live_candidate_symbols(
+            config,
+            metadata,
+            as_of_date=as_of_date,
+            universe_mode=resolved_mode,
+        )
+        if load_symbols is None:
+            load_symbols = live_candidates
+        else:
+            live_candidate_set = set(live_candidates)
+            load_symbols = [symbol for symbol in load_symbols if symbol in live_candidate_set]
+            benchmark_symbol = str(config["data"]["benchmark_symbol"]).upper()
+            if benchmark_symbol not in load_symbols:
+                load_symbols.insert(0, benchmark_symbol)
+    histories = load_local_histories(paths.raw_dir, symbols=load_symbols, start_date=start_date, end_date=end_date)
     if not histories:
         raise FileNotFoundError("No local raw symbol histories were found. Run scripts/download_history.py first.")
     histories, external_merge_summary = merge_histories_with_external(histories, config, as_of_date=as_of_date)

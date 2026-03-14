@@ -221,6 +221,17 @@ export:
   live_pool_size: 5
   save_legacy_live_pool: true
 
+live_build:
+  prefilter_enabled: true
+  include_previous_live_pool: true
+  min_candidate_count: 20
+  max_candidate_count: 30
+  history_ratio: 0.90
+  volume_ratio: 0.80
+  liquidity_stability_ratio: 0.90
+  tradable_ratio: 0.98
+  liquidity_days_ratio: 0.90
+
 publish:
   enabled: false
   mode: "core_major"
