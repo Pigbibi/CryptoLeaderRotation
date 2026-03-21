@@ -4,6 +4,10 @@
 .idea/
 .vscode/
 
+# AI tool artifacts (superpowers, codex, etc.)
+docs/superpowers/
+docs/codex_review_plan.md
+
 # Python / local environments
 .venv/
 venv/
