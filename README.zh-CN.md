@@ -86,6 +86,7 @@ crypto-leader-rotation/
   .github/
     workflows/
       monthly_publish.yml
+      ai_review.yml
   README.md
   README.zh-CN.md
   requirements.txt
@@ -351,6 +352,32 @@ make monthly-review-briefing
 - 当月度产物在 `as_of_date`、`version`、`mode` 上不一致时，明确报 warning
 - 生成一份结构化的人工复核 prompt / checklist
 - 这是 reporting-only，不会改变 monthly build 行为
+
+## 自动化 AI 月度审阅
+
+月报 bundle 组装完成后，workflow 会自动创建一个 GitHub Issue，内容为完整的 `ai_review_input.md`。另一个独立的 workflow（`ai_review.yml`）监听带有 `monthly-review` 标签的 Issue，触发 Claude Code Action（Anthropic API，Sonnet 模型）进行分析。
+
+AI 审阅覆盖范围：
+
+- **发布一致性**：交叉检查 `live_pool.json`、`release_manifest.json`、`release_status_summary.json` 在日期、版本、模式、池大小和币种上是否一致
+- **异常检测**：标记意外的 warning、过时的产物、验证失败或可疑的排名分数
+- **下游影响**：分析对 BinanceQuant（下游执行引擎）的影响，包括池子变动和降级风险
+- **操作员待办事项**：汇总 checklist 并补充 AI 识别出的跟进事项
+- **代码改进**：如果发现具体、低风险的改进，Claude 可能会自动提 PR（不会自动合并）
+
+所有分析结果同时以英文和中文输出。
+
+### 需要配置的 GitHub Secret
+
+- `ANTHROPIC_API_KEY`：Anthropic API 密钥
+
+配置方式：
+
+```bash
+gh secret set ANTHROPIC_API_KEY --body "sk-ant-..."
+```
+
+AI 审阅 workflow 运行在 `ubuntu-latest`（不需要 self-hosted runner），每月运行一次费用约 $0.01-0.05。
 
 ## Dynamic Universe Logic
 

@@ -112,6 +112,7 @@ crypto-leader-rotation/
   .github/
     workflows/
       monthly_publish.yml
+      ai_review.yml
   README.md
   requirements.txt
   .gitignore
@@ -515,6 +516,32 @@ Behavior:
 - emits warnings when monthly artifacts do not align on `as_of_date`, `version`, or `mode`
 - produces a structured review prompt/checklist for manual follow-up
 - is reporting-only and does not alter monthly build behavior
+
+## Automated AI Monthly Review
+
+After the monthly report bundle is assembled, the workflow automatically creates a GitHub Issue containing the full `ai_review_input.md` content. A separate workflow (`ai_review.yml`) listens for issues labeled `monthly-review` and triggers Claude Code Action (Anthropic API, Sonnet model) to analyze the report.
+
+The AI review covers:
+
+- **Release consistency**: cross-checks `live_pool.json`, `release_manifest.json`, and `release_status_summary.json` for agreement on date, version, mode, pool size, and symbols
+- **Anomaly detection**: flags unexpected warnings, stale artifacts, validation failures, or suspicious ranking scores
+- **Downstream impact**: notes implications for BinanceQuant (the downstream execution engine), including pool changes and degradation risk
+- **Operator action items**: summarizes the checklist and adds any AI-identified follow-up items
+- **Code improvements**: if concrete, low-risk improvements are found, Claude may open a Pull Request (never auto-merged)
+
+All analysis is posted in both English and Chinese.
+
+### Required GitHub Secret
+
+- `ANTHROPIC_API_KEY`: Anthropic API key for Claude Code Action
+
+Setup:
+
+```bash
+gh secret set ANTHROPIC_API_KEY --body "sk-ant-..."
+```
+
+The AI review workflow runs on `ubuntu-latest` (no self-hosted runner required) and costs approximately $0.01-0.05 per monthly run.
 
 ## Dynamic Universe Logic
 
@@ -961,7 +988,11 @@ Practical review file selection:
 - best single file to send to AI for review: `ai_review_input.md`
 - optional follow-up checklist for AI: `monthly_review_prompt.md`
 
-Recommended AI handoff:
+Automated AI handoff:
+
+The workflow now automatically creates a GitHub Issue with the `monthly-review` label, which triggers Claude Code Action to analyze the report. See the "Automated AI Monthly Review" section for details.
+
+Manual AI handoff (fallback):
 
 1. download the artifact from the workflow run
 2. open `ai_review_input.md`

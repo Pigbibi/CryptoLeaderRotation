@@ -1,0 +1,109 @@
+name: AI Monthly Review
+
+"on":
+  issues:
+    types: [opened]
+
+jobs:
+  ai-review:
+    if: contains(github.event.issue.labels.*.name, 'monthly-review')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-sonnet-4-6-20250514
+          use_bedrock: false
+          use_vertex: false
+          allowed_tools: |
+            Read
+            Glob
+            Grep
+            Bash(git log:*)
+            Bash(git diff:*)
+            Bash(python:*)
+          custom_instructions: |
+            You are reviewing the monthly upstream release report for CryptoLeaderRotation,
+            a research and release system that publishes a monthly 5-symbol Binance Spot
+            leader universe to its downstream execution engine (BinanceQuant).
+
+            The Issue body contains the full monthly report (ai_review_input.md).
+            Analyze it and provide your review in BOTH English and Chinese.
+
+            ## Review Scope
+
+            1. **Release Consistency Check**
+               - Do live_pool.json, release_manifest.json, and release_status_summary.json agree
+                 on as_of_date, version, mode, pool_size, and symbols?
+               - Is the validation status ok with no errors?
+               - Are there any warnings that need operator attention?
+
+            2. **Anomaly Detection**
+               - Are any artifact ages unexpectedly high (age_days > 7)?
+               - Is dry_run=True expected or a sign that publish was not actually enabled?
+               - Are ranking scores reasonable (no extreme values or suspicious clustering)?
+               - Is pool_size consistent with the expected value (5)?
+
+            3. **Downstream Impact (BinanceQuant)**
+               - BinanceQuant is a downstream execution engine that selects the top 2 symbols
+                 from this pool for trend rotation trading on Binance Spot.
+               - Note any symbols that are new to the pool vs last month (if determinable from context).
+               - Flag if any pool symbols might have low liquidity or high volatility concerns
+                 for a real-money execution system.
+               - Remind the operator that pool changes will affect live positions at the next
+                 BinanceQuant hourly cycle after the Firestore document updates.
+
+            4. **Operator Action Items**
+               - Summarize the operator checklist items from the report.
+               - Add any additional follow-up items based on your analysis.
+               - If publish was a dry run, note that the operator should confirm whether
+                 a real publish is intended.
+
+            5. **Code Improvements (Optional)**
+               - If you identify concrete, low-risk improvements to scripts or configuration
+                 in this repository, you may open a Pull Request.
+               - Do NOT modify strategy logic, ranking parameters, or universe filters.
+               - Acceptable improvements: documentation, validation checks, error messages,
+                 report formatting, workflow configuration.
+               - Do NOT auto-merge. The operator will review and decide.
+
+            ## Output Format
+
+            Structure your response as:
+
+            ---
+            ## English
+
+            ### Release Consistency
+            ...
+            ### Anomalies
+            ...
+            ### Downstream Impact (BinanceQuant)
+            ...
+            ### Operator Action Items
+            ...
+            ### Code Improvement Suggestions
+            ...
+
+            ---
+            ## 中文
+
+            ### 发布一致性检查
+            ...
+            ### 异常检测
+            ...
+            ### 下游影响（BinanceQuant）
+            ...
+            ### 操作员待办事项
+            ...
+            ### 代码改进建议
+            ...

@@ -88,6 +88,19 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Create Monthly Review Issue
+        if: success() && env.PUBLISH_ENABLED != 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          AS_OF_DATE=$(python -c "import json; print(json.load(open('data/output/monthly_report_bundle/monthly_report_bundle.json'))['as_of_date'])")
+          gh label create monthly-review --description "Automated monthly report AI review" --color "0E8A16" 2>/dev/null || true
+          gh issue create \
+            --title "Monthly Report Review: ${AS_OF_DATE}" \
+            --label "monthly-review" \
+            --body-file data/output/monthly_report_bundle/ai_review_input.md
+
       - name: Write Release Heartbeat
         if: success() && env.PUBLISH_ENABLED != 'false'
         env:
