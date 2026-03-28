@@ -163,7 +163,7 @@ Symptoms:
 
 Actions:
 
-- Fix the missing workflow variable first, or rely on the backward-compatible secret fallback when it is still present
+- Fix the missing workflow variable first
 - Re-run `scripts/publish_release.py --dry-run --mode core_major`
 - Only retry real publish after dry-run is clean
 

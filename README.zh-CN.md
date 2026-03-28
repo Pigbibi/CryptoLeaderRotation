@@ -316,8 +316,7 @@ make monthly-build-telegram
 环境变量：
 
 - `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-- `GLOBAL_TELEGRAM_CHAT_ID`（当 `TELEGRAM_CHAT_ID` 未设置时回退）
+- `GLOBAL_TELEGRAM_CHAT_ID`
 
 它的行为是：
 

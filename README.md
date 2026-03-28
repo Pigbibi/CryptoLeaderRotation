@@ -480,8 +480,7 @@ make monthly-build-telegram
 Environment:
 
 - `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-- `GLOBAL_TELEGRAM_CHAT_ID` (fallback when `TELEGRAM_CHAT_ID` is not set)
+- `GLOBAL_TELEGRAM_CHAT_ID`
 
 Behavior:
 
@@ -1015,8 +1014,6 @@ This workflow currently reads:
 From `secrets.*`:
 
 - `GCP_SERVICE_ACCOUNT_KEY`
-- `GCP_PROJECT_ID` (fallback only)
-- `GCS_BUCKET` (fallback only)
 
 From `vars.*`:
 
@@ -1036,7 +1033,7 @@ Practical setup paths:
    - `gh secret set ...`
    - `gh variable set ...`
 
-The workflow uses `secrets.*` for credentials. Non-secret publish targets such as `GCP_PROJECT_ID` and `GCS_BUCKET` now prefer `vars.*`, while keeping `secrets.*` as a backward-compatible fallback.
+The workflow uses `secrets.*` for credentials. Non-secret publish targets such as `GCP_PROJECT_ID` and `GCS_BUCKET` must be configured through `vars.*`.
 
 Recommended first setup:
 

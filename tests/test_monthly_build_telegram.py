@@ -110,7 +110,7 @@ class MonthlyBuildTelegramTests(unittest.TestCase):
         self.assertFalse(payload["shadow_tracks"]["official_baseline"]["available"])
         self.assertIn("shadow: not_generated_in_this_run", message)
 
-    def test_main_falls_back_to_global_telegram_chat_id(self) -> None:
+    def test_main_uses_global_telegram_chat_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             self.write_fixture_files(root)
