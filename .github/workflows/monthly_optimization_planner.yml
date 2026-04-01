@@ -88,17 +88,78 @@ jobs:
       - name: Append optimization summary
         run: cat data/output/monthly_optimization/optimization_summary.md >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Create monthly optimization issue
+        id: optimization_issue
+        run: |
+          issue_output=$(python3 scripts/post_monthly_optimization_issue.py \
+            --repo "${GITHUB_REPOSITORY}" \
+            --plan-file data/output/monthly_optimization/optimization_plan.json \
+            --summary-file data/output/monthly_optimization/optimization_summary.md)
+          echo "$issue_output"
+          issue_number=$(printf '%s\n' "$issue_output" | awk -F= '/^issue_number=/{print $2}' | tail -1)
+          if [ -z "$issue_number" ]; then
+            echo "Failed to capture optimization issue number" >&2
+            exit 1
+          fi
+          echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fan out CryptoLeaderRotation task issue
+        run: |
+          python3 scripts/fanout_monthly_optimization_tasks.py \
+            --plan-file data/output/monthly_optimization/optimization_plan.json \
+            --owner-repo CryptoLeaderRotation \
+            --repo "${GITHUB_REPOSITORY}" \
+            --planner-issue-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/issues/${{ steps.optimization_issue.outputs.issue_number }}" \
+            --output-file data/output/monthly_optimization/fanout/crypto_leader_rotation.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fan out CryptoStrategies task issue
+        run: |
+          python3 scripts/fanout_monthly_optimization_tasks.py \
+            --plan-file data/output/monthly_optimization/optimization_plan.json \
+            --owner-repo CryptoStrategies \
+            --repo "QuantStrategyLab/CryptoStrategies" \
+            --planner-issue-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/issues/${{ steps.optimization_issue.outputs.issue_number }}" \
+            --output-file data/output/monthly_optimization/fanout/crypto_strategies.json \
+            --allow-permission-skip
+        env:
+          GITHUB_TOKEN: ${{ secrets.CROSS_REPO_GITHUB_TOKEN }}
+
+      - name: Fan out BinancePlatform task issue
+        run: |
+          python3 scripts/fanout_monthly_optimization_tasks.py \
+            --plan-file data/output/monthly_optimization/optimization_plan.json \
+            --owner-repo BinancePlatform \
+            --repo "${{ inputs.downstream_repo }}" \
+            --planner-issue-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/issues/${{ steps.optimization_issue.outputs.issue_number }}" \
+            --output-file data/output/monthly_optimization/fanout/binance_platform.json \
+            --allow-permission-skip
+        env:
+          GITHUB_TOKEN: ${{ secrets.CROSS_REPO_GITHUB_TOKEN }}
+
+      - name: Append fanout summary
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+
+          result_dir = Path("data/output/monthly_optimization/fanout")
+          print("\n## Repo Task Fanout")
+          for path in sorted(result_dir.glob("*.json")):
+              data = json.loads(path.read_text(encoding="utf-8"))
+              line = f"- **{data['owner_repo']}** `{data['status']}`"
+              if data.get("issue_url"):
+                  line += f": {data['issue_url']}"
+              elif data.get("reason"):
+                  line += f": {data['reason']}"
+              print(line)
+          PY
+
       - name: Upload planner artifact
         uses: actions/upload-artifact@v7
         with:
           name: monthly-optimization-plan-${{ inputs.upstream_run_id }}-${{ inputs.downstream_run_id }}
           path: data/output/monthly_optimization/
-
-      - name: Create monthly optimization issue
-        run: |
-          python3 scripts/post_monthly_optimization_issue.py \
-            --repo "${GITHUB_REPOSITORY}" \
-            --plan-file data/output/monthly_optimization/optimization_plan.json \
-            --summary-file data/output/monthly_optimization/optimization_summary.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
