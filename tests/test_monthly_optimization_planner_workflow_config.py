@@ -9,7 +9,7 @@ WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "monthly_optimization_p
 
 
 class MonthlyOptimizationPlannerWorkflowConfigTests(unittest.TestCase):
-    def test_planner_workflow_downloads_artifacts_and_posts_issue(self) -> None:
+    def test_planner_workflow_downloads_artifacts_posts_issue_and_fans_out_tasks(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         self.assertIn("workflow_dispatch:", workflow)
@@ -25,6 +25,12 @@ class MonthlyOptimizationPlannerWorkflowConfigTests(unittest.TestCase):
         self.assertIn("build_ai_review_payload.py", workflow)
         self.assertIn("build_monthly_optimization_plan.py", workflow)
         self.assertIn("post_monthly_optimization_issue.py", workflow)
+        self.assertIn("fanout_monthly_optimization_tasks.py", workflow)
+        self.assertIn("Fan out CryptoLeaderRotation task issue", workflow)
+        self.assertIn("Fan out CryptoStrategies task issue", workflow)
+        self.assertIn("Fan out BinancePlatform task issue", workflow)
+        self.assertIn("--allow-permission-skip", workflow)
+        self.assertIn("Append fanout summary", workflow)
         self.assertIn("upstream_review_payload.json", workflow)
         self.assertIn("downstream_review_payload.json", workflow)
         self.assertIn("actions/upload-artifact@v7", workflow)
