@@ -18,7 +18,7 @@ jobs:
   planner:
     runs-on: ubuntu-latest
     permissions:
-      actions: read
+      actions: write
       contents: read
       issues: write
 
@@ -157,6 +157,37 @@ jobs:
                   line += f": {data['reason']}"
               print(line)
           PY
+
+      - name: Resolve upstream experiment validation target
+        id: upstream_experiment_target
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          fanout = json.loads(
+              Path("data/output/monthly_optimization/fanout/crypto_leader_rotation.json").read_text(encoding="utf-8")
+          )
+          plan = json.loads(
+              Path("data/output/monthly_optimization/optimization_plan.json").read_text(encoding="utf-8")
+          )
+          actions = plan.get("repo_action_summary", {}).get("CryptoLeaderRotation", {}).get("actions", [])
+          should_dispatch = bool(fanout.get("issue_number")) and fanout.get("status") in {"created", "updated"} and any(
+              action.get("experiment_only") for action in actions
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              print(f"should_dispatch={'true' if should_dispatch else 'false'}", file=output)
+              print(f"issue_number={fanout.get('issue_number') or ''}", file=output)
+          PY
+
+      - name: Dispatch CryptoLeaderRotation experiment validation
+        if: steps.upstream_experiment_target.outputs.should_dispatch == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run experiment_validation.yml \
+            -f issue_number="${{ steps.upstream_experiment_target.outputs.issue_number }}"
 
       - name: Upload planner artifact
         uses: actions/upload-artifact@v7
