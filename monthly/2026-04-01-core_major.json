@@ -1,0 +1,17 @@
+{
+  "version": "2026-04-01-core_major",
+  "as_of_date": "2026-04-01",
+  "mode": "core_major",
+  "pool_size": 5,
+  "symbols": [
+    "TRXUSDT",
+    "ETHUSDT",
+    "NEARUSDT",
+    "TAOUSDT",
+    "LINKUSDT"
+  ],
+  "storage_prefix": "gs://binancequant-crypto-leader-rotation/crypto-leader-rotation/releases/2026-04-01-core_major",
+  "generated_at": "2026-04-01T07:40:42.679157+00:00",
+  "workflow_run_id": "23837442059",
+  "workflow_run_url": "https://github.com/QuantStrategyLab/CryptoLeaderRotation/actions/runs/23837442059"
+}
