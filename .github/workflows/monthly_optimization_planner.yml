@@ -189,6 +189,44 @@ jobs:
           gh workflow run experiment_validation.yml \
             -f issue_number="${{ steps.upstream_experiment_target.outputs.issue_number }}"
 
+      - name: Resolve downstream experiment validation target
+        id: downstream_experiment_target
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          fanout = json.loads(
+              Path("data/output/monthly_optimization/fanout/binance_platform.json").read_text(encoding="utf-8")
+          )
+          plan = json.loads(
+              Path("data/output/monthly_optimization/optimization_plan.json").read_text(encoding="utf-8")
+          )
+          actions = plan.get("repo_action_summary", {}).get("BinancePlatform", {}).get("actions", [])
+          should_dispatch = bool(fanout.get("issue_number")) and fanout.get("status") in {"created", "updated"} and any(
+              action.get("experiment_only") for action in actions
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              print(f"should_dispatch={'true' if should_dispatch else 'false'}", file=output)
+              print(f"issue_number={fanout.get('issue_number') or ''}", file=output)
+          PY
+
+      - name: Dispatch BinancePlatform experiment validation
+        if: steps.downstream_experiment_target.outputs.should_dispatch == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CROSS_REPO_GITHUB_TOKEN }}
+        run: |
+          set +e
+          gh workflow run experiment_validation.yml \
+            -R "${{ inputs.downstream_repo }}" \
+            -f issue_number="${{ steps.downstream_experiment_target.outputs.issue_number }}"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Downstream experiment validation dispatch skipped: CROSS_REPO_GITHUB_TOKEN likely needs Actions write on ${{ inputs.downstream_repo }}." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Upload planner artifact
         uses: actions/upload-artifact@v7
         with:

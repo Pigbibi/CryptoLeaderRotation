@@ -16,6 +16,8 @@ jobs:
     permissions:
       contents: read
       issues: write
+    env:
+      DOWNLOAD_TOP_LIQUID: ${{ vars.DOWNLOAD_TOP_LIQUID || '90' }}
 
     steps:
       - name: Checkout
@@ -91,6 +93,11 @@ jobs:
           if [ -f data/output/experiment_validation/skip_reason.txt ]; then
             cat data/output/experiment_validation/skip_reason.txt >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Download raw history for experiment validation
+        if: steps.experiment_payload.outputs.should_run == 'true'
+        run: |
+          python3 scripts/download_history.py --top-liquid "${DOWNLOAD_TOP_LIQUID}" --force-exchange-info
 
       - name: Run monthly shadow build
         if: steps.experiment_payload.outputs.should_run == 'true' && steps.experiment_payload.outputs.run_shadow_build == 'true'
