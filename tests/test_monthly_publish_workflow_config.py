@@ -14,6 +14,9 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         self.assertIn("actions: write", workflow)
+        self.assertIn("actions/checkout@v6", workflow)
+        self.assertIn("google-github-actions/auth@v3", workflow)
+        self.assertIn("actions/upload-artifact@v7", workflow)
         self.assertIn("GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}", workflow)
         self.assertIn("GCS_BUCKET: ${{ vars.GCS_BUCKET }}", workflow)
         self.assertIn("credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}", workflow)
@@ -44,6 +47,7 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertIn("Load review issue context", workflow)
         self.assertIn("api.github.com/repos/{repo}/issues/{issue_number}", workflow)
         self.assertIn("github_token: ${{ secrets.GITHUB_TOKEN }}", workflow)
+        self.assertIn('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"', workflow)
         self.assertIn("This is a strategy-optimization review, not only a release QA check.", workflow)
         self.assertIn("If shadow or challenger tracks are missing, say evidence is incomplete", workflow)
         self.assertIn("Strategy Optimization Directions", workflow)
